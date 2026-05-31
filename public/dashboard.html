@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XEN 一键收菜系统</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/dashboard.css?v=20260523-wallet-queue" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-line">
+          <h1>XEN 一键收菜系统 <span class="rocket-badge" aria-hidden="true">🚀</span></h1>
+          <a class="gas-pill" href="https://etherscan.io/gastracker" target="_blank" rel="noopener noreferrer" aria-label="查看 Etherscan Gas Tracker">Gas <strong id="consoleGas">-</strong></a>
+        </div>
+        <div class="actions">
+          <button id="refreshButton" class="secondary-button" type="button">刷新</button>
+          <div id="walletControl" class="wallet-control">
+            <button id="connectWalletButton" class="secondary-button wallet-connect-button" type="button" aria-expanded="false">连接钱包</button>
+            <div id="walletMenu" class="wallet-menu" hidden></div>
+          </div>
+        </div>
+      </header>
+      <section class="wallet-spread-section">
+        <div class="wallet-spread-heading">
+          <div>
+            <h2>钱包管理</h2>
+          </div>
+          <div class="wallet-manage-actions" aria-label="钱包管理">
+            <button id="addWalletButton" class="wallet-manage-button" type="button" aria-label="增加监控钱包" title="增加监控钱包">+</button>
+            <button id="deleteWalletButton" class="wallet-manage-button" type="button" aria-label="删除监控钱包" title="删除监控钱包">−</button>
+          </div>
+        </div>
+        <div id="walletSpreadGrid" class="wallet-spread-grid"></div>
+      </section>
+
+      <section class="console-shell">
+        <div class="console-main">
+          <div class="console-layout">
+            <div class="console-toolbar">
+              <div class="mode-switch split-mode-switch" aria-label="执行模式">
+                <span class="mode-button-group">
+                  <button class="mode-button active" type="button" data-console-mode="claimRemint">可复投</button>
+                  <button class="mode-button" type="button" data-console-mode="claim">可收</button>
+                  <button class="mode-button" type="button" data-console-mode="mint">新种</button>
+                </span>
+                <span class="mode-button-divider" aria-hidden="true"></span>
+                <button class="mode-button mode-button-all" type="button" data-console-mode="all">查看全部</button>
+              </div>
+            </div>
+
+            <div id="consoleGrid" class="console-grid">
+              <label id="consoleTermField" class="console-field">
+                <span id="consoleTermLabel">复投天数</span>
+                <input id="consoleTermInput" type="number" min="1" step="1" value="469" />
+              </label>
+              <div id="consoleExpiryField" class="console-stat">
+                <span id="consoleExpiryLabel">预计新到期</span>
+                <label id="consoleExpiryDateButton" class="console-expiry-date-button">
+                  <strong id="consoleExpiry">-</strong>
+                  <em id="consoleExpiryWeekday"></em>
+                  <input id="consoleExpiryDateInput" type="date" aria-label="选择预计到期日期" />
+                </label>
+                <div id="consoleExpiryCalendar" class="console-expiry-calendar" hidden></div>
+              </div>
+              <div class="hero-metric">
+                <span id="consoleMetricLabel">可复投数量</span>
+                <strong id="consoleClaimable">-</strong>
+                <small id="consoleRange" hidden></small>
+              </div>
+              <label id="consoleMintField" class="console-field" hidden>
+                <span>本次 Mint 数量</span>
+                <input id="consoleMintCountInput" type="number" min="1" step="1" value="1000" />
+              </label>
+              <div id="consoleMintRangeField" class="console-stat console-mint-range-field" hidden>
+                <span>预期 Mint 编号</span>
+                <strong id="consoleMintRange">-</strong>
+              </div>
+              <div class="console-action-row">
+                <div class="console-actions">
+                  <button id="startClaimRemintButton" type="button">开始复投</button>
+                </div>
+                <span id="consoleHint">只会通过浏览器钱包签名，后台不保存私钥。</span>
+              </div>
+              <div id="consoleMergeBar" class="console-merge-bar">
+                <label id="consoleMergeField" class="console-merge-field">
+                  <span>合并分组</span>
+                  <input id="consoleMergeSizeInput" type="number" min="1" step="1" value="100" placeholder="数量" aria-label="Group Merge 数量" />
+                </label>
+                <label id="consoleSelectAllField" class="console-toolbar-check">
+                  <input id="consoleSelectAllCheckbox" type="checkbox" />
+                  <span>选中全部</span>
+                </label>
+                <label id="consoleDueWeekField" class="console-toolbar-check" hidden>
+                  <input id="consoleDueWeekCheckbox" type="checkbox" />
+                  <span>查看最近到期</span>
+                </label>
+                <div class="console-selection-inline">
+                  <strong id="consoleSelectedGroups">已选 0 组 / 共 0 组</strong>
+                  <strong id="consoleSelectedQuantity">已选 0 个地址</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="consoleBatchSelector" class="console-batch-selector"></div>
+        </div>
+
+        <aside class="console-side">
+          <div class="console-side-cards">
+            <div id="consoleSubmitLimitField" class="console-field console-submit-limit-field">
+              <span>单笔提交上限</span>
+              <input id="consoleSubmitLimitInput" type="number" min="1" step="1" value="100" placeholder="上限" aria-label="单笔提交上限" />
+            </div>
+            <div class="console-stat console-tx-stat">
+              <span>预计提交笔数</span>
+              <strong id="consoleTxCount">-</strong>
+            </div>
+          </div>
+          <div class="side-heading">
+            <h2>拆单预览</h2>
+            <span id="sideBatchSizeLabel">100 个/笔</span>
+          </div>
+          <div id="batchPreviewList" class="batch-preview-list"></div>
+          <div id="executionLog" class="execution-log"></div>
+        </aside>
+      </section>
+    </main>
+
+    <div id="walletModal" class="modal-backdrop" hidden>
+      <form id="walletForm" class="modal wallet-modal" method="dialog">
+        <div class="modal-heading wallet-modal-heading">
+          <div>
+            <span>钱包管理</span>
+            <h2 id="walletModalTitle">新增钱包</h2>
+          </div>
+          <button id="walletModalClose" class="icon-button" type="button" aria-label="关闭">×</button>
+        </div>
+        <div id="walletAddFields" class="wallet-modal-body">
+          <label class="field" for="walletNameInput">
+            <span>钱包名称</span>
+            <input id="walletNameInput" type="text" autocomplete="off" placeholder="XEN 01" />
+          </label>
+          <label class="field" for="walletAddressInput">
+            <span>钱包地址</span>
+            <input id="walletAddressInput" type="text" autocomplete="off" spellcheck="false" placeholder="0x..." />
+          </label>
+        </div>
+        <div id="walletDeleteBody" class="wallet-modal-body" hidden></div>
+        <p id="walletModalError" class="wallet-modal-error" hidden></p>
+        <div class="modal-actions">
+          <button id="walletModalCancel" class="secondary-button" type="button">取消</button>
+          <button id="walletModalSubmit" type="submit">确定</button>
+        </div>
+      </form>
+    </div>
+
+    <button id="scrollTopButton" class="scroll-top-button" type="button" hidden>返回最上</button>
+
+    <script src="/dashboard.js?v=20260525-tx-safety" type="module"></script>
+  </body>
+</html>

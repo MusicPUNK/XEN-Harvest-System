@@ -1,0 +1,26 @@
+*.log
+.DS_Store
+.env
+.env.*
+.npmrc
+
+data/*.sqlite
+data/*.sqlite-*
+data/*.xlsx
+data/*.xlsx.meta.json
+data/*.pid
+data/*.log
+outputs/
+memory/
+docs/superpowers/
+
+# Private one-off planning scripts and accidental pasted range fragments.
+scripts/build-*-replant-plan.mjs
+scripts/build-wallet-*.mjs
+scripts/mark-*-wait.mjs
+scripts/repair-*-from-audit.mjs
+F,*],*
+FF,*],*
+node_modules
+node_modules/
+.superpowers/

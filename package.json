@@ -1,0 +1,30 @@
+{
+  "name": "xen-auto-mint",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "XEN 一键收菜系统 CoinTool batch claim/remint/mint automation tools.",
+  "scripts": {
+    "check:runtime": "node scripts/check-node-version.mjs",
+    "check:dashboard-js": "node --check public/dashboard.js",
+    "test": "node scripts/check-node-version.mjs && node --test tests/*.test.ts tests/*.test.mjs",
+    "cli": "node bin/xen-auto-mint.mjs",
+    "dashboard": "node bin/xen-dashboard.mjs",
+    "dashboard:service": "node bin/xen-dashboard-service.mjs status",
+    "dashboard:install": "node scripts/install-dashboard-launch-agent.mjs install",
+    "dashboard:uninstall": "node scripts/install-dashboard-launch-agent.mjs uninstall",
+    "dashboard:status": "node scripts/install-dashboard-launch-agent.mjs status",
+    "sync:google-cache": "node bin/xen-sync-google-cache.mjs"
+  },
+  "bin": {
+    "xen-auto-mint": "bin/xen-auto-mint.mjs",
+    "xen-dashboard": "bin/xen-dashboard.mjs",
+    "xen-sync-google-cache": "bin/xen-sync-google-cache.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}
