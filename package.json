@@ -1,7 +1,6 @@
 {
   "name": "xen-harvest-system",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "XEN 一键收菜系统 CoinTool batch claim/remint/mint automation tools.",
   "scripts": {

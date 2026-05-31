@@ -68,6 +68,8 @@ RPC_URL="https://your-rpc.example"
 
 Keep RPC configuration on the local command line or in `.env`. The dashboard intentionally does not expose a browser-side RPC input, because letting a web page send arbitrary backend RPC URLs is unsafe if someone later exposes the server beyond localhost.
 
+If `ETHERSCAN_API_KEY` is configured, wallet addresses are sent to Etherscan to read CoinTool transaction history. RPC providers also see the chain reads needed for monitored wallets. Use your own RPC/Etherscan credentials if you want those third-party requests under your own account.
+
 ## Run Tests
 
 ```bash
@@ -114,4 +116,5 @@ There is currently no `lint` or `build` script in `package.json`.
 - The backend does not sign transactions.
 - The browser wallet is the only signer.
 - Local runtime data, caches, databases, and logs should not be committed.
+- Do not commit or upload your own `.env`, `data/`, `outputs/`, `memory/`, wallet lists, or runtime logs.
 - Public RPC endpoints are useful for testing, but users with many wallets should configure their own RPC provider.

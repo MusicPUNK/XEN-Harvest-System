@@ -398,7 +398,7 @@ export async function buildDashboardResponse(
   };
   chain: {
     enabled: boolean;
-    rpcUrl: string | null;
+    rpcConfigured: boolean;
     saltHex: string;
     checkedAt: string | null;
     checkedWallets: number;
@@ -476,7 +476,7 @@ export async function buildDashboardResponse(
     },
     chain: {
       enabled: chainCounts.enabled,
-      rpcUrl: chainCounts.rpcUrl,
+      rpcConfigured: Boolean(chainCounts.rpcUrl),
       saltHex: chainCounts.saltHex,
       checkedAt: chainCounts.checkedAt,
       checkedWallets: data.summary.chainCheckedWallets,
