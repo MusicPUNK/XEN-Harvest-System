@@ -52,7 +52,21 @@ COINTOOL_SALT_HEX="0x01"
 ETHERSCAN_API_KEY="<optional-history-check-key>"
 ```
 
-The default RPC is a public endpoint for trial use. For larger scans, set your own `RPC_URL`.
+The default RPC is a public endpoint for trial use. For larger scans, set your own RPC before starting the dashboard.
+
+One-time command:
+
+```bash
+npm run dashboard -- --rpc-url "https://your-rpc.example"
+```
+
+Or create a local `.env` file from `.env.example` and set:
+
+```bash
+RPC_URL="https://your-rpc.example"
+```
+
+Keep RPC configuration on the local command line or in `.env`. The dashboard intentionally does not expose a browser-side RPC input, because letting a web page send arbitrary backend RPC URLs is unsafe if someone later exposes the server beyond localhost.
 
 ## Run Tests
 
