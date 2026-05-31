@@ -20,7 +20,7 @@ test("builds read-only dashboard summary and queue totals from workbook rows", (
     today: "2026-05-04",
     dueSoonDays: 7,
     maxBatchSize: 80,
-    sourcePath: "/tmp/xen.xlsx",
+    sourcePath: "public-test-source",
     generatedAt: "2026-05-04T08:00:00.000Z",
   });
 

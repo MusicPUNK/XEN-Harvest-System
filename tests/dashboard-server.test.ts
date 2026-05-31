@@ -1,8 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import {
   DEFAULT_CHAIN_STATUS_TIMEOUT_MS,
@@ -12,13 +9,8 @@ import {
   buildMintPreviewResponse,
   readDashboardAsset,
 } from "../src/dashboard-server.ts";
-import { metadataPathForCache } from "../src/cache.ts";
 import type { WorkbookRow } from "../src/models.ts";
 import { buildClaimRemintCalldata, buildMintCalldata } from "../src/template.ts";
-
-const SAMPLE_SPREADSHEET_ID = "1SamplePublicSheetId234567890";
-const SAMPLE_SPREADSHEET_URL = `https://docs.google.com/spreadsheets/d/${SAMPLE_SPREADSHEET_ID}/edit`;
-const SAMPLE_DRIVE_FILE_URL = `https://drive.google.com/file/d/${SAMPLE_SPREADSHEET_ID}`;
 
 function historyTx(overrides: {
   blockNumber: number;
@@ -58,7 +50,6 @@ test("builds read-only dashboard api payload and static shell", async () => {
     },
   ];
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/xen.xlsx",
     today: "2026-05-04",
     generatedAt: "2026-05-04T09:00:00.000Z",
     readRows: () => rows,
@@ -151,7 +142,6 @@ test("builds read-only dashboard api payload and static shell", async () => {
 
 test("dashboard metadata uses the dynamic XEN max mint term", async () => {
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-13",
     readRows: () => [],
     getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
@@ -162,40 +152,9 @@ test("dashboard metadata uses the dynamic XEN max mint term", async () => {
   assert.equal(dashboard.data.metadata.maxMintTermDays, 505);
 });
 
-test("can read dashboard rows from a Google Sheet source hook", async () => {
-  let usedGoogleSource = false;
-  const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
-    googleSheetUrl: SAMPLE_SPREADSHEET_URL,
-    today: "2026-05-04",
-    readRows: () => {
-      usedGoogleSource = true;
-      return [
-        {
-          sheet: "X7-8f39",
-          rowNumber: 37,
-          wallet: "0x1111111111111111111111111111111111111111",
-          label: "35001-35080",
-          mintDateRaw: null,
-          termDaysRaw: null,
-          expiryRaw: null,
-          quantityRaw: 80,
-          claimAmountRaw: null,
-        },
-      ];
-    },
-    getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
-  });
-
-  assert.equal(usedGoogleSource, true);
-  assert.equal(dashboard.data.metadata.sourcePath, SAMPLE_SPREADSHEET_URL);
-  assert.equal(dashboard.data.summary.plannedMint, 80);
-});
-
 test("includes a connected wallet from chain even when no workbook row exists", async () => {
   const wallet = "0x1111111111111111111111111111111111118f39";
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-13",
     readRows: () => [],
     getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
@@ -226,7 +185,6 @@ test("public mode does not read workbook rows and monitors submitted wallets", a
   const wallet = "0x2222222222222222222222222222222222228f39";
   let readRowsCalled = false;
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/private.xlsx",
     publicMode: true,
     today: "2026-05-16",
     readRows: () => {
@@ -264,7 +222,6 @@ test("public mode derives chain maturity batches from monitored wallet minted co
   const soonIso = new Date(soonTs * 1000).toISOString();
   const seenRanges: Array<[number, number]> = [];
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/private.xlsx",
     publicMode: true,
     today: "2026-05-16",
     plannedMintBatchSize: 50,
@@ -311,7 +268,6 @@ test("public mode scans dashboard maturity in 50-id batches when no CoinTool his
   const laterIso = "2026-11-01T12:00:00.000Z";
   const soonIso = "2026-06-01T09:00:00.000Z";
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/private.xlsx",
     publicMode: true,
     plannedMintBatchSize: 4,
     getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
@@ -350,7 +306,6 @@ test("public mode chunks large no-history wallets for dashboard maturity display
   const soonIso = "2026-06-01T09:00:00.000Z";
   const laterIso = "2026-11-01T12:00:00.000Z";
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/private.xlsx",
     publicMode: true,
     getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
     getChainCounts: async () => [
@@ -385,7 +340,6 @@ test("public mode chunks large no-history wallets for dashboard maturity display
 test("public mode keeps connected wallet ids visible when maturity reads time out", async () => {
   const wallet = "0x222222222222222222222222222222222222ca95";
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/private.xlsx",
     publicMode: true,
     chainStatusTimeoutMs: 1,
     getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
@@ -416,7 +370,6 @@ test("public mode keeps fast wallet maturity data when another wallet times out"
   const slowWallet = "0x333333333333333333333333333333333333e599";
   const soonIso = "2026-06-01T09:00:00.000Z";
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/private.xlsx",
     publicMode: true,
     chainStatusTimeoutMs: 20,
     getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
@@ -472,7 +425,6 @@ test("public mode uses CoinTool history ranges instead of fixed chunks when avai
   const latestIso = "2026-08-01T09:00:00.000Z";
   const seenRanges: Array<[string | undefined, number, number, number | undefined]> = [];
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/private.xlsx",
     publicMode: true,
     plannedMintBatchSize: 50,
     getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
@@ -533,7 +485,6 @@ test("monitored wallets derive chain maturity batches outside public mode", asyn
   const soonTs = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
   const soonIso = new Date(soonTs * 1000).toISOString();
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/private.xlsx",
     today: "2026-05-16",
     plannedMintBatchSize: 50,
     claimBatchSize: 100,
@@ -576,206 +527,9 @@ test("monitored wallets derive chain maturity batches outside public mode", asyn
   assert.equal(dashboard.data.dueSoon.length, 1);
 });
 
-test("falls back to local rows when Google Sheet is not readable", async () => {
-  const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
-    googleSheetUrl: "https://docs.google.com/spreadsheets/d/private/edit",
-    today: "2026-05-04",
-    readGoogleRows: async () => {
-      throw new Error("Google Sheet export failed: HTTP 401");
-    },
-    readExcelRows: () => [
-      {
-        sheet: "X7-8f39",
-        rowNumber: 37,
-        wallet: "0x1111111111111111111111111111111111111111",
-        label: "35001-35080",
-        mintDateRaw: null,
-        termDaysRaw: null,
-        expiryRaw: null,
-        quantityRaw: 80,
-        claimAmountRaw: null,
-      },
-    ],
-    getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
-  });
-
-  assert.equal(dashboard.data.metadata.sourcePath, "/tmp/fallback.xlsx");
-  assert.equal(dashboard.data.summary.plannedMint, 80);
-  assert.match(dashboard.source.warning ?? "", /HTTP 401/);
-});
-
-test("uses synced cache before Google Sheet and fallback Excel", async () => {
-  let usedCache = false;
-  const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
-    googleSheetUrl: "https://docs.google.com/spreadsheets/d/private/edit",
-    cacheFile: "/tmp/xen-google-cache.xlsx",
-    today: "2026-05-04",
-    readCacheRows: (cacheFile) => {
-      usedCache = true;
-      assert.equal(cacheFile, "/tmp/xen-google-cache.xlsx");
-      return [
-        {
-          sheet: "X7-8f39",
-          rowNumber: 37,
-          wallet: "0x1111111111111111111111111111111111111111",
-          label: "35001-35160",
-          mintDateRaw: null,
-          termDaysRaw: null,
-          expiryRaw: null,
-          quantityRaw: 160,
-          claimAmountRaw: null,
-        },
-      ];
-    },
-    readGoogleRows: async () => {
-      throw new Error("Google should not be called when a cache is available");
-    },
-    readExcelRows: () => {
-      throw new Error("Excel should not be called when a cache is available");
-    },
-    getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
-  });
-
-  assert.equal(usedCache, true);
-  assert.equal(dashboard.source.kind, "google_sheet");
-  assert.equal(dashboard.source.storageKind, "cache");
-  assert.equal(dashboard.source.warning, null);
-  assert.equal(dashboard.source.displayName, "Google Sheet 数据");
-  assert.equal(dashboard.data.metadata.sourcePath, "https://docs.google.com/spreadsheets/d/private/edit");
-  assert.equal(dashboard.source.localPath, "/tmp/xen-google-cache.xlsx");
-  assert.equal(dashboard.data.summary.plannedMint, 160);
-});
-
-test("refreshes Google Sheet rows instead of stale cache when requested", async () => {
-  let usedCache = false;
-  let usedGoogle = false;
-  const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
-    googleSheetUrl: "https://docs.google.com/spreadsheets/d/private/edit",
-    cacheFile: "/tmp/xen-google-cache.xlsx",
-    today: "2026-05-04",
-    readCacheRows: () => {
-      usedCache = true;
-      return [
-        {
-          sheet: "X7-8f39",
-          rowNumber: 37,
-          wallet: "0x1111111111111111111111111111111111111111",
-          label: "35001-35160",
-          mintDateRaw: null,
-          termDaysRaw: null,
-          expiryRaw: 270704,
-          quantityRaw: 160,
-          claimAmountRaw: null,
-        },
-      ];
-    },
-    readGoogleRows: () => {
-      usedGoogle = true;
-      return [
-        {
-          sheet: "X7-8f39",
-          rowNumber: 37,
-          wallet: "0x1111111111111111111111111111111111111111",
-          label: "35001-40000",
-          mintDateRaw: null,
-          termDaysRaw: null,
-          expiryRaw: 270704,
-          quantityRaw: 5000,
-          claimAmountRaw: null,
-        },
-      ];
-    },
-    getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
-  }, { refreshGoogle: true });
-
-  assert.equal(usedGoogle, true);
-  assert.equal(usedCache, false);
-  assert.equal(dashboard.source.storageKind, "google_sheet");
-  assert.equal(dashboard.source.warning, null);
-  assert.equal(dashboard.data.summary.plannedMint, 5000);
-});
-
-test("uses cache with a warning when Google Sheet refresh fails", async () => {
-  const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
-    googleSheetUrl: "https://docs.google.com/spreadsheets/d/private/edit",
-    cacheFile: "/tmp/xen-google-cache.xlsx",
-    today: "2026-05-04",
-    readCacheRows: () => [
-      {
-        sheet: "X7-8f39",
-        rowNumber: 37,
-        wallet: "0x1111111111111111111111111111111111111111",
-        label: "35001-35160",
-        mintDateRaw: null,
-        termDaysRaw: null,
-        expiryRaw: 270704,
-        quantityRaw: 160,
-        claimAmountRaw: null,
-      },
-    ],
-    readGoogleRows: async () => {
-      throw new Error("Google Sheet export failed: HTTP 401");
-    },
-    getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
-  }, { refreshGoogle: true });
-
-  assert.equal(dashboard.source.storageKind, "cache");
-  assert.match(dashboard.source.warning ?? "", /HTTP 401/);
-  assert.equal(dashboard.data.summary.plannedMint, 160);
-});
-
-test("includes Google Sheet metadata when the cache has sync metadata", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "xen-cache-source-test-"));
-  const cacheFile = join(dir, "google-sheet-cache.xlsx");
-  await writeFile(
-    metadataPathForCache(cacheFile),
-    JSON.stringify({
-      sourceTitle: "workbook.xlsx",
-      sourceUrl: SAMPLE_DRIVE_FILE_URL,
-      syncedAt: "2026-05-04T08:21:45.000Z",
-      bytes: 821693,
-    }),
-  );
-
-  const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
-    googleSheetUrl: "https://docs.google.com/spreadsheets/d/private/edit",
-    cacheFile,
-    today: "2026-05-04",
-    readCacheRows: () => [
-      {
-        sheet: "X1.4-87a8",
-        rowNumber: 1,
-        wallet: "0x3333333333333333333333333333333333333333",
-        label: "1-80",
-        mintDateRaw: 260101,
-        termDaysRaw: 367,
-        expiryRaw: 270103,
-        quantityRaw: 80,
-        claimAmountRaw: null,
-      },
-    ],
-    getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
-  });
-
-  assert.equal(dashboard.source.kind, "google_sheet");
-  assert.equal(dashboard.source.storageKind, "cache");
-  assert.equal(dashboard.source.displayName, "Google Sheet 数据");
-  assert.equal(dashboard.source.detail, "workbook.xlsx");
-  assert.equal(dashboard.source.url, SAMPLE_DRIVE_FILE_URL);
-  assert.equal(dashboard.source.syncedAt, "2026-05-04T08:21:45.000Z");
-  assert.equal(dashboard.source.localPath, cacheFile);
-  assert.equal(dashboard.data.metadata.sourcePath, SAMPLE_DRIVE_FILE_URL);
-});
-
 test("includes read-only CoinTool chain count checks in wallet rows", async () => {
   const wallet = "0x3333333333333333333333333333333333333333";
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-04",
     readRows: () => [
       {
@@ -816,7 +570,6 @@ test("includes read-only CoinTool chain count checks in wallet rows", async () =
 
 test("builds a planned mint transaction preview response", async () => {
   const preview = await buildMintPreviewResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-05",
     plannedMintBatchSize: 50,
     readRows: () => [
@@ -848,7 +601,6 @@ test("builds a planned mint transaction preview response", async () => {
 test("checks chain maturity for active rows beyond the due-soon window", async () => {
   let candidates: Array<{ sheet: string; idStart: number; idEnd: number }> = [];
   await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-13",
     dueSoonDays: 7,
     readRows: () => [
@@ -877,7 +629,6 @@ test("checks chain maturity for active rows beyond the due-soon window", async (
 
 test("does not block the dashboard when chain maturity reads are slow", async () => {
   const dashboard = await buildDashboardResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-13",
     chainStatusTimeoutMs: 1,
     readRows: () => [
@@ -905,7 +656,6 @@ test("does not block the dashboard when chain maturity reads are slow", async ()
 test("builds a manual mint preview response from the wallet chain count", async () => {
   const wallet = "0x1111111111111111111111111111111111111111";
   const preview = await buildMintPreviewResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-13",
     plannedMintBatchSize: 50,
     readRows: () => [],
@@ -935,7 +685,6 @@ test("builds a manual mint preview response from the wallet chain count", async 
 test("manual mint preview honors single submit limit", async () => {
   const wallet = "0x1111111111111111111111111111111111111111";
   const preview = await buildMintPreviewResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-13",
     plannedMintBatchSize: 50,
     readRows: () => [],
@@ -964,7 +713,6 @@ test("manual mint preview rejects terms beyond the XEN max mint term", async () 
   const wallet = "0x1111111111111111111111111111111111111111";
   await assert.rejects(
     buildMintPreviewResponse({
-      excelFile: "/tmp/fallback.xlsx",
       today: "2026-05-13",
       readRows: () => [],
       getGas: async () => ({ source: "unavailable", gasPriceGwei: null }),
@@ -985,7 +733,6 @@ test("manual mint preview rejects terms beyond the XEN max mint term", async () 
 test("planned mint preview skips ids that chain count has already minted", async () => {
   const wallet = "0x1111111111111111111111111111111111111111";
   const preview = await buildMintPreviewResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-09",
     plannedMintBatchSize: 50,
     readRows: () => [
@@ -1024,7 +771,6 @@ test("planned mint preview skips ids that chain count has already minted", async
 test("planned mint preview catches up ids when chain is behind a partially recorded row", async () => {
   const wallet = "0x1111111111111111111111111111111111111111";
   const preview = await buildMintPreviewResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-13",
     plannedMintBatchSize: 50,
     readRows: () => [
@@ -1076,7 +822,6 @@ test("planned mint preview catches up ids when chain is behind a partially recor
 
 test("builds a chain-verified claim+remint preview response", async () => {
   const preview = await buildClaimRemintPreviewResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-09",
     claimBatchSize: 100,
     readRows: () => [
@@ -1116,7 +861,6 @@ test("builds a chain-verified claim+remint preview response", async () => {
 
 test("builds a chain-verified claim-only preview response", async () => {
   const preview = await buildClaimPreviewResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-09",
     claimBatchSize: 100,
     readRows: () => [
@@ -1161,7 +905,6 @@ test("builds a chain-verified claim-only preview response", async () => {
 
 test("builds claim+remint preview response for selected batches and merge size", async () => {
   const preview = await buildClaimRemintPreviewResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-09",
     claimBatchSize: 100,
     readRows: () => [
@@ -1228,7 +971,6 @@ test("builds claim+remint preview response for selected batches and merge size",
 test("public claim+remint preview rebuilds candidates from the submitted wallet", async () => {
   const wallet = "0x2222222222222222222222222222222222222222";
   const preview = await buildClaimRemintPreviewResponse({
-    excelFile: "/tmp/private.xlsx",
     publicMode: true,
     today: "2026-05-16",
     claimBatchSize: 100,
@@ -1282,7 +1024,6 @@ test("public claim+remint preview rebuilds candidates from the submitted wallet"
 
 test("claim+remint preview response uses submit limit separately from selected card size", async () => {
   const preview = await buildClaimRemintPreviewResponse({
-    excelFile: "/tmp/fallback.xlsx",
     today: "2026-05-09",
     readRows: () => [
       {

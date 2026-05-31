@@ -654,9 +654,6 @@ async function loadDashboard(options = {}) {
   elements.refreshButton.disabled = true;
   try {
     const params = new URLSearchParams();
-    if (options.refreshGoogle) {
-      params.set("refreshGoogle", "1");
-    }
     if (state.connectedWallet) {
       params.set("connectedWallet", state.connectedWallet);
     }

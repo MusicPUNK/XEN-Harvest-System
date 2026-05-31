@@ -1,19 +1,12 @@
 #!/usr/bin/env node
-import { fileURLToPath } from "node:url";
-
 import { assertSupportedNodeVersion } from "../scripts/check-node-version.mjs";
 
 assertSupportedNodeVersion();
 
 const { DEFAULT_CHAIN_STATUS_TIMEOUT_MS, listenDashboardServer } = await import("../src/dashboard-server.ts");
 
-const DEFAULT_CACHE_FILE = fileURLToPath(new URL("../data/google-sheet-cache.xlsx", import.meta.url));
 const DEFAULT_RPC_URL = "https://ethereum.publicnode.com";
 const args = parseArgs(process.argv.slice(2));
-const excelFile = args.file ?? process.env.XEN_EXCEL_FILE;
-const cacheFile = args["cache-file"] ?? process.env.XEN_GOOGLE_CACHE_FILE ?? DEFAULT_CACHE_FILE;
-const googleSheetUrl = args["google-sheet-url"] ?? process.env.GOOGLE_SHEET_URL;
-const googleDownloadUrl = args["google-download-url"] ?? process.env.GOOGLE_DOWNLOAD_URL ?? process.env.XEN_GOOGLE_DOWNLOAD_URL;
 const host = args.host ?? process.env.HOST ?? "127.0.0.1";
 const startPort = Number(args.port ?? process.env.PORT ?? 4173);
 const dueSoonDays = Number(args["due-soon-days"] ?? process.env.DUE_SOON_DAYS ?? 14);
@@ -24,14 +17,10 @@ const rpcTimeoutMs = Number(args["rpc-timeout-ms"] ?? process.env.RPC_TIMEOUT_MS
 const chainStatusTimeoutMs = Number(args["chain-status-timeout-ms"] ?? process.env.CHAIN_STATUS_TIMEOUT_MS ?? DEFAULT_CHAIN_STATUS_TIMEOUT_MS);
 const etherscanApiKey = args["etherscan-api-key"] ?? process.env.ETHERSCAN_API_KEY;
 const etherscanChainId = Number(args["etherscan-chain-id"] ?? process.env.ETHERSCAN_CHAIN_ID ?? 1);
-const publicMode = args.public !== "false" && process.env.XEN_PUBLIC_MODE !== "0";
+const publicMode = true;
 const demoClaimable = args["demo-claimable"] === "true" || process.env.XEN_DEMO_CLAIMABLE === "1";
 const demoHooks = demoClaimable ? await import("../src/demo-data.ts") : null;
 const serverOptions = {
-  excelFile,
-  cacheFile: publicMode ? undefined : cacheFile,
-  googleSheetUrl: publicMode || demoClaimable ? undefined : googleSheetUrl,
-  googleDownloadUrl: publicMode || demoClaimable ? undefined : googleDownloadUrl,
   host,
   dueSoonDays,
   claimBatchSize,
@@ -62,11 +51,7 @@ const { server, url } = allowPortFallback ? await listenWithFallback({
 console.log("XEN 一键收菜系统 read-only dashboard");
 console.log(`URL: ${url}`);
 if (publicMode) {
-  console.log("Source: public chain monitor (no workbook/cache reads)");
-} else {
-  console.log(`Cache: ${cacheFile}`);
-  console.log(`Google Sheet: ${googleSheetUrl ?? "not configured"}`);
-  console.log(`Fallback Excel: ${excelFile ?? "not configured"}`);
+  console.log("Source: public chain monitor (no local file reads)");
 }
 console.log(`RPC: ${args["rpc-url"] ?? process.env.RPC_URL ?? DEFAULT_RPC_URL}`);
 console.log(`History: ${demoClaimable ? "demo" : etherscanApiKey ? "Etherscan" : "disabled (set ETHERSCAN_API_KEY to enable)"}`);

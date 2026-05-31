@@ -11,7 +11,6 @@ The current build is deliberately conservative. Planned `mint`, plain `claim`, a
 - Native `node:test` test runner.
 - Browser dashboard served by Node's built-in HTTP server.
 - Ethereum JSON-RPC calls for gas and CoinTool `map(address,bytes)` chain count checks.
-- Optional local workbook tools use Python `openpyxl` and SQLite.
 
 ## Main Features
 
@@ -30,7 +29,7 @@ The current build is deliberately conservative. Planned `mint`, plain `claim`, a
 npm install
 ```
 
-The public dashboard only needs Node.js dependencies. Optional local workbook commands also need Python `openpyxl` and the `sqlite3` CLI.
+The public dashboard only needs Node.js dependencies.
 
 ## Run Locally
 
@@ -42,6 +41,8 @@ npm run dashboard
 
 The server listens on `127.0.0.1` by default. Wallet addresses are stored in your own browser storage; the backend does not save private keys, seed phrases, or wallet passwords.
 
+Do not expose this server directly to the public internet without adding your own authentication and rate limiting.
+
 Common environment variables:
 
 ```bash
@@ -52,15 +53,6 @@ ETHERSCAN_API_KEY="<optional-history-check-key>"
 ```
 
 The default RPC is a public endpoint for trial use. For larger scans, set your own `RPC_URL`.
-
-Optional advanced local workbook mode:
-
-```bash
-node bin/xen-dashboard.mjs --public false --file "/path/to/workbook.xlsx"
-node bin/xen-auto-mint.mjs import-excel --file "/path/to/workbook.xlsx" --db data/xen.sqlite --today 2026-05-05
-node bin/xen-auto-mint.mjs queue --db data/xen.sqlite --claim-batch-size 100 --planned-mint-batch-size 50
-node bin/xen-auto-mint.mjs verify --db data/xen.sqlite
-```
 
 ## Run Tests
 
@@ -90,8 +82,7 @@ There is currently no `lint` or `build` script in `package.json`.
 
 ## Project Structure
 
-- `bin/` - CLI entrypoints for dashboard and optional local import/queue tools.
-- `src/importer.ts` - workbook row classification.
+- `bin/` - CLI entrypoints for the local dashboard.
 - `src/queue.ts` - queue chunking rules for planned mint and claim/remint.
 - `src/action-preview.ts` - planned mint, selected claim, and selected claim+remint preview generation.
 - `src/template.ts` - CoinTool calldata decoding/building helpers.
@@ -100,7 +91,7 @@ There is currently no `lint` or `build` script in `package.json`.
 - `src/dashboard-server.ts` - HTTP API and static dashboard server.
 - `public/` - dashboard HTML/CSS/JS.
 - `tests/` - Node test coverage for wallet monitoring, queue, chain, dashboard, and calldata behavior.
-- `scripts/` - Node version check, workbook reader, and optional local service helpers.
+- `scripts/` - Node version check and optional local service helpers.
 - `data/`, `outputs/`, and `memory/` - local/generated/private runtime files; intentionally ignored by Git.
 
 ## Security Model
@@ -108,5 +99,5 @@ There is currently no `lint` or `build` script in `package.json`.
 - The backend does not store private keys or seed phrases.
 - The backend does not sign transactions.
 - The browser wallet is the only signer.
-- Local workbook files, caches, databases, and logs are local runtime data and should not be committed.
+- Local runtime data, caches, databases, and logs should not be committed.
 - Public RPC endpoints are useful for testing, but users with many wallets should configure their own RPC provider.

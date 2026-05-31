@@ -1,12 +1,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildClaimPreview, buildClaimRemintPreview, buildMintPreview, type ClaimPreview, type ClaimRemintPreview, type MintPreview } from "./action-preview.ts";
 import { buildDashboardData, type DashboardData } from "./dashboard-data.ts";
-import { readWorkbookCacheMetadata, syncWorkbookCache } from "./cache.ts";
 import {
   DEFAULT_COINTOOL_SALT_HEX,
   readCoinToolMintCounts,
@@ -16,10 +14,8 @@ import {
   type ChainMintCount,
   type ChainMintStatus,
 } from "./chain.ts";
-import { readWorkbookRows } from "./excel.ts";
 import { readEtherscanCoinToolTransactions } from "./etherscan.ts";
 import { gasAllowsExecution, getGasSnapshot, type GasSnapshot } from "./gas.ts";
-import { buildGoogleSheetExportUrl, readGoogleSheetRows } from "./google-sheet.ts";
 import { classifyWorkbookRows } from "./importer.ts";
 import type { MintRecord, WorkbookRow } from "./models.ts";
 import { buildCoinToolHistoryIndex, type CoinToolHistoryIndex, type CoinToolHistoryTransaction } from "./tx-history.ts";
@@ -33,10 +29,7 @@ const PUBLIC_WALLET_STATUS_MAX_TIMEOUT_MS = 60_000;
 const FALLBACK_MAX_MINT_TERM_DAYS = 488;
 
 export type DashboardServerOptions = {
-  excelFile: string;
-  cacheFile?: string;
-  googleSheetUrl?: string;
-  googleDownloadUrl?: string;
+  excelFile?: string;
   host?: string;
   port?: number;
   today?: string;
@@ -55,9 +48,6 @@ export type DashboardServerOptions = {
   generatedAt?: string;
   staticDir?: string;
   readRows?: () => WorkbookRow[] | Promise<WorkbookRow[]>;
-  readCacheRows?: (cacheFile: string) => WorkbookRow[] | Promise<WorkbookRow[]>;
-  readGoogleRows?: (googleSheetUrl: string) => WorkbookRow[] | Promise<WorkbookRow[]>;
-  readExcelRows?: (excelFile: string) => WorkbookRow[] | Promise<WorkbookRow[]>;
   getGas?: () => Promise<GasSnapshot>;
   saltHex?: string;
   getChainCounts?: (wallets: string[]) => Promise<ChainMintCount[]>;
@@ -116,7 +106,6 @@ export function createDashboardServer(options: DashboardServerOptions): Server {
       }
       if (url.pathname === "/api/dashboard") {
         sendJson(response, 200, await buildDashboardResponse(options, {
-          refreshGoogle: url.searchParams.get("refreshGoogle") === "1",
           connectedWallet: url.searchParams.get("connectedWallet") ?? undefined,
           monitoredWallets: parsePublicWallets(url.searchParams.get("wallets")),
         }));
@@ -292,7 +281,7 @@ export async function buildClaimPreviewResponse(
 
 async function buildClaimPreviewCandidates(
   options: DashboardServerOptions,
-  source: { rows: WorkbookRow[]; kind: "public" | "cache" | "google_sheet" | "excel" },
+  source: { rows: WorkbookRow[]; kind: "public" | "excel" },
   input: { sheet: string; wallet?: string },
   today: string,
   claimBatchSize: number,
@@ -389,7 +378,7 @@ async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
 
 export async function buildDashboardResponse(
   options: DashboardServerOptions,
-  sourceOptions: { refreshGoogle?: boolean; connectedWallet?: string; monitoredWallets?: PublicWalletInput[] } = {},
+  sourceOptions: { connectedWallet?: string; monitoredWallets?: PublicWalletInput[] } = {},
 ): Promise<{
   data: ReturnType<typeof buildDashboardData>;
   gas: {
@@ -398,8 +387,8 @@ export async function buildDashboardResponse(
     allowed: boolean;
   };
   source: {
-    kind: "public" | "google_sheet" | "excel";
-    storageKind: "public" | "cache" | "google_sheet" | "excel";
+    kind: "public" | "excel";
+    storageKind: "public" | "excel";
     displayName: string;
     detail: string | null;
     url: string | null;
@@ -476,7 +465,7 @@ export async function buildDashboardResponse(
       allowed: maxFeeGwei > 0 ? gasAllowsExecution(snapshot, maxFeeGwei) : false,
     },
     source: {
-      kind: source.kind === "cache" ? "google_sheet" : source.kind,
+      kind: source.kind,
       storageKind: source.kind,
       displayName: source.displayName,
       detail: source.detail,
@@ -1196,10 +1185,9 @@ function latestCheckedAt(counts: ChainMintCount[]): string | null {
 
 async function readSourceRows(
   options: DashboardServerOptions,
-  sourceOptions: { refreshGoogle?: boolean } = {},
 ): Promise<{
   rows: WorkbookRow[];
-  kind: "public" | "cache" | "google_sheet" | "excel";
+  kind: "public" | "excel";
   path: string;
   displayPath: string;
   displayName: string;
@@ -1224,158 +1212,21 @@ async function readSourceRows(
     };
   }
   if (options.readRows) {
-    const path = options.googleSheetUrl ?? options.excelFile;
+    const path = options.excelFile ?? "injected-data";
     return {
       rows: await options.readRows(),
-      kind: options.googleSheetUrl ? "google_sheet" : "excel",
+      kind: "excel",
       path,
       displayPath: path,
-      displayName: options.googleSheetUrl ? "Google Sheet" : "本地 Excel",
-      detail: options.googleSheetUrl ?? path,
-      url: options.googleSheetUrl ?? null,
+      displayName: "本地 Excel",
+      detail: path,
+      url: null,
       syncedAt: null,
-      localPath: options.googleSheetUrl ? null : path,
+      localPath: path,
       warning: null,
     };
   }
-  const warnings: string[] = [];
-  if (sourceOptions.refreshGoogle && options.googleSheetUrl) {
-    if (options.readGoogleRows) {
-      try {
-        return {
-          rows: await options.readGoogleRows(options.googleSheetUrl),
-          kind: "google_sheet",
-          path: options.googleSheetUrl,
-          displayPath: options.googleSheetUrl,
-          displayName: "Google Sheet",
-          detail: options.googleSheetUrl,
-          url: options.googleSheetUrl,
-          syncedAt: new Date().toISOString(),
-          localPath: null,
-          warning: null,
-        };
-      } catch (error) {
-        warnings.push(`Google Sheet refresh failed: ${(error as Error).message}`);
-      }
-    } else if (options.cacheFile) {
-      try {
-        const sourceUrl = options.googleDownloadUrl ?? buildGoogleSheetExportUrl(options.googleSheetUrl);
-        await syncWorkbookCache({
-          cacheFile: options.cacheFile,
-          sourceUrl,
-          sourceTitle: "workbook.xlsx",
-          sourceLink: options.googleSheetUrl,
-        });
-        return await readCacheSource(options, warnings);
-      } catch (error) {
-        warnings.push(`Google Sheet refresh failed: ${(error as Error).message}`);
-      }
-    } else {
-      try {
-        const readGoogleRows = readGoogleSheetRows;
-        return {
-          rows: await readGoogleRows(options.googleSheetUrl),
-          kind: "google_sheet",
-          path: options.googleSheetUrl,
-          displayPath: options.googleSheetUrl,
-          displayName: "Google Sheet",
-          detail: options.googleSheetUrl,
-          url: options.googleSheetUrl,
-          syncedAt: new Date().toISOString(),
-          localPath: null,
-          warning: null,
-        };
-      } catch (error) {
-        warnings.push(`Google Sheet refresh failed: ${(error as Error).message}`);
-      }
-    }
-  }
-  if (options.cacheFile && (options.readCacheRows || existsSync(options.cacheFile))) {
-    try {
-      return await readCacheSource(options, warnings);
-    } catch (error) {
-      warnings.push(`Cache unreadable: ${(error as Error).message}`);
-    }
-  }
-  if (options.googleSheetUrl) {
-    try {
-      const readGoogleRows = options.readGoogleRows ?? readGoogleSheetRows;
-      return {
-        rows: await readGoogleRows(options.googleSheetUrl),
-        kind: "google_sheet",
-        path: options.googleSheetUrl,
-        displayPath: options.googleSheetUrl,
-        displayName: "Google Sheet",
-        detail: options.googleSheetUrl,
-        url: options.googleSheetUrl,
-        syncedAt: null,
-        localPath: null,
-        warning: warnings.length > 0 ? warnings.join("; ") : null,
-      };
-    } catch (error) {
-      warnings.push(`Google Sheet unreadable: ${(error as Error).message}`);
-      const readExcelRows = options.readExcelRows ?? readWorkbookRows;
-      return {
-        rows: await readExcelRows(options.excelFile),
-        kind: "excel",
-        path: options.excelFile,
-        displayPath: options.excelFile,
-        displayName: "本地 Excel",
-        detail: options.excelFile,
-        url: null,
-        syncedAt: null,
-        localPath: options.excelFile,
-        warning: `${warnings.join("; ")}, using fallback Excel`,
-      };
-    }
-  }
-  const readExcelRows = options.readExcelRows ?? readWorkbookRows;
-  return {
-    rows: await readExcelRows(options.excelFile),
-    kind: "excel",
-    path: options.excelFile,
-    displayPath: options.excelFile,
-    displayName: "本地 Excel",
-    detail: options.excelFile,
-    url: null,
-    syncedAt: null,
-    localPath: options.excelFile,
-    warning: warnings.length > 0 ? `${warnings.join("; ")}, using fallback Excel` : null,
-  };
-}
-
-async function readCacheSource(
-  options: DashboardServerOptions,
-  warnings: string[] = [],
-): Promise<{
-  rows: WorkbookRow[];
-  kind: "cache";
-  path: string;
-  displayPath: string;
-  displayName: string;
-  detail: string | null;
-  url: string | null;
-  syncedAt: string | null;
-  localPath: string;
-  warning: string | null;
-}> {
-  if (!options.cacheFile) {
-    throw new Error("Missing cacheFile");
-  }
-  const readCacheRows = options.readCacheRows ?? readWorkbookRows;
-  const metadata = await readWorkbookCacheMetadata(options.cacheFile);
-  return {
-    rows: await readCacheRows(options.cacheFile),
-    kind: "cache",
-    path: options.cacheFile,
-    displayPath: metadata?.sourceUrl ?? options.googleSheetUrl ?? options.cacheFile,
-    displayName: "Google Sheet 数据",
-    detail: metadata?.sourceTitle ?? "已授权读取的 Google Sheet",
-    url: metadata?.sourceUrl ?? options.googleSheetUrl ?? null,
-    syncedAt: metadata?.syncedAt ?? null,
-    localPath: options.cacheFile,
-    warning: warnings.length > 0 ? warnings.join("; ") : null,
-  };
+  throw new Error("This public build only supports wallet monitoring mode.");
 }
 
 export function listenDashboardServer(options: DashboardServerOptions): Promise<{ server: Server; url: string }> {
